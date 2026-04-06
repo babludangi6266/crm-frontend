@@ -14,7 +14,7 @@ const Navbar = ({ setSidebarOpen }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex w-full bg-white drop-shadow-sm justify-between px-4 py-4 md:px-6">
+    <header className="sticky top-4 z-30 mx-4 md:mx-6 lg:mx-8 flex glass justify-between px-6 py-4 rounded-2xl shadow-sm border border-white/40 backdrop-blur-xl transition-all duration-300 hover:shadow-md">
       <div className="flex items-center gap-2">
         <button
           onClick={(e) => {

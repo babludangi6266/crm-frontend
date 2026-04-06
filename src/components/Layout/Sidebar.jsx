@@ -63,7 +63,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   return (
     <aside
       ref={sidebar}
-      className={`absolute left-0 top-0 z-40 flex h-screen w-64 flex-col overflow-y-hidden bg-dark-bg text-dark-text duration-300 ease-linear lg:static lg:translate-x-0 ${
+      className={`absolute left-0 top-0 z-40 flex h-full w-64 flex-col overflow-y-hidden glass-dark text-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] duration-300 ease-linear lg:static lg:translate-x-0 lg:rounded-2xl ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
@@ -94,9 +94,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                 <NavLink
                   to={link.path}
                   onClick={() => setSidebarOpen(false)}
-                  className={`group relative flex items-center gap-3 rounded-lg px-4 py-3 font-medium duration-300 ease-in-out hover:bg-gray-800 ${
-                    pathname.includes(link.path) && 'bg-primary-600 text-white shadow-md hover:bg-primary-700'
-                  } ${!pathname.includes(link.path) && 'text-gray-300'}`}
+                  className={`group relative flex items-center gap-3 rounded-xl px-4 py-3 font-medium transition-all duration-300 ease-in-out hover:bg-white/10 hover:-translate-y-0.5 hover:shadow-lg ${
+                    pathname.includes(link.path) ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg'
+                    : 'text-gray-300'
+                  }`}
                 >
                   <span className="text-xl">{link.icon}</span>
                   {link.title}
