@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { FiFileText, FiPlus, FiEdit } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiEdit, FiZap, FiMic } from 'react-icons/fi';
 import Modal from '../../components/Modals/Modal';
 
 const Reports = () => {
@@ -9,6 +9,8 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], content: '' });
+  const [drafting, setDrafting] = useState(false);
+  const [listening, setListening] = useState(false);
 
   const fetchReports = async () => {
     try {
@@ -48,6 +50,35 @@ const Reports = () => {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Action failed');
     }
+  };
+
+  const handleAutoDraft = async () => {
+    try {
+      setDrafting(true);
+      const { data } = await api.get('/reports/auto-draft');
+      setFormData({ ...formData, content: data.draft });
+      toast.success('Auto-draft generated successfully');
+    } catch (error) {
+      toast.error('Failed to generate auto-draft');
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const handleDictate = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return toast.error('Voice dictation not supported in this browser.');
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setFormData(prev => ({ ...prev, content: prev.content + (prev.content ? ' ' : '') + transcript }));
+    };
+    recognition.onerror = (e) => toast.error('Microphone error: ' + e.error);
+    recognition.start();
   };
 
   return (
@@ -110,7 +141,26 @@ const Reports = () => {
             <p className="text-xs text-gray-400 mt-1">If a report already exists for this date, it will be updated.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">What did you work on? *</label>
+            <div className="flex justify-between items-end mb-1">
+              <label className="block text-sm font-medium text-gray-700">What did you work on? *</label>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={handleDictate}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded transition-colors ${listening ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                >
+                  <FiMic className={listening ? "animate-bounce" : ""} /> {listening ? 'Listening...' : 'Dictate'}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleAutoDraft}
+                  disabled={drafting}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50"
+                >
+                  <FiZap className={drafting ? "animate-pulse" : ""} /> {drafting ? 'Drafting...' : '✨ Auto-Draft Activity'}
+                </button>
+              </div>
+            </div>
             <textarea required className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 transition-shadow resize-none h-40"
               value={formData.content} onChange={e => setFormData({ ...formData, content: e.target.value })} placeholder="List your tasks, progress, blockers, etc..." />
           </div>

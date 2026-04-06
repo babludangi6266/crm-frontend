@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { FiEdit, FiTrash2, FiPlus, FiFileText } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiPlus, FiFileText, FiDownload } from 'react-icons/fi';
+import html2pdf from 'html2pdf.js';
 import Modal from '../../components/Modals/Modal';
 
 const Invoices = () => {
@@ -83,6 +84,75 @@ const Invoices = () => {
     }
   };
 
+  const handleDownloadPDF = (invoice) => {
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="padding: 40px; font-family: 'Inter', sans-serif; color: #333;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #14b8a6; padding-bottom: 20px;">
+          <div>
+            <h1 style="color: #14b8a6; font-size: 28px; margin: 0;">Lexa ERP</h1>
+            <p style="margin: 5px 0; font-size: 14px; color: #666;">Corporate Headquarters</p>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; font-size: 24px; color: #333;">INVOICE</h2>
+            <p style="margin: 5px 0; font-weight: bold;">#${invoice.invoiceNumber}</p>
+          </div>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 30px;">
+          <div>
+            <h4 style="margin: 0 0 10px 0; color: #666; text-transform: uppercase; font-size: 12px;">Billed To:</h4>
+            <p style="margin: 0; font-weight: bold; font-size: 16px;">${invoice.client?.company || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #555;">${invoice.client?.name || ''}</p>
+          </div>
+          <div style="text-align: right;">
+            <p style="margin: 0 0 5px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+            <p style="margin: 0;"><strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString()}</p>
+          </div>
+        </div>
+
+        <table style="width: 100%; margin-top: 40px; border-collapse: collapse;">
+          <thead>
+            <tr style="background-color: #f9fafb; text-align: left;">
+              <th style="padding: 12px; border-bottom: 1px solid #eee;">Description (Project)</th>
+              <th style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 12px; border-bottom: 1px solid #eee;">${invoice.project?.name || 'Services Rendered'}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">$${invoice.amount.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
+          <div style="width: 250px;">
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; font-size: 18px; font-weight: bold; border-top: 2px solid #333;">
+              <span>Total Due:</span>
+              <span style="color: #14b8a6;">$${invoice.amount.toLocaleString()}</span>
+            </div>
+            <p style="text-align: right; font-size: 12px; color: #888; margin-top: 5px; text-transform: uppercase; font-weight: bold;">Status: ${invoice.status}</p>
+          </div>
+        </div>
+        
+        <div style="margin-top: 80px; text-align: center; color: #888; font-size: 12px; border-top: 1px solid #eee; padding-top: 20px;">
+          Thank you for doing business with us!
+        </div>
+      </div>
+    `;
+
+    const opt = {
+      margin:       0,
+      filename:     `Invoice_${invoice.invoiceNumber}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  };
+
   const getStatusBadge = (status) => {
     return status === 'paid'
       ? <span className="px-2.5 py-1 text-[10px] font-bold tracking-wider bg-green-100 text-green-800 border border-green-200 rounded-full">PAID</span>
@@ -133,6 +203,7 @@ const Invoices = () => {
                       </td>
                       <td className="p-4">{getStatusBadge(inv.status)}</td>
                       <td className="p-4 flex gap-2 justify-end items-center h-full">
+                        <button onClick={() => handleDownloadPDF(inv)} className="p-2 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-md transition-colors" title="Download PDF"><FiDownload className="text-lg" /></button>
                         <button onClick={() => handleOpenModal(inv)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors" title="Edit"><FiEdit className="text-lg" /></button>
                         <button onClick={() => handleDelete(inv._id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md transition-colors" title="Delete"><FiTrash2 className="text-lg" /></button>
                       </td>

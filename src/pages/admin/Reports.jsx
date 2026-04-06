@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { FiFileText, FiPlus, FiSearch, FiCalendar, FiList, FiEye, FiEdit } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiSearch, FiCalendar, FiList, FiEye, FiEdit, FiZap, FiMic } from 'react-icons/fi';
 import Modal from '../../components/Modals/Modal';
 import { useSelector } from 'react-redux';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -24,6 +24,8 @@ const AdminReports = () => {
   
   // Submit own report states
   const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], content: '' });
+  const [drafting, setDrafting] = useState(false);
+  const [listening, setListening] = useState(false);
   
   const { userInfo } = useSelector(state => state.auth);
 
@@ -86,10 +88,54 @@ const AdminReports = () => {
     }
   };
 
+  const handleAutoDraft = async () => {
+    try {
+      setDrafting(true);
+      const { data } = await api.get('/reports/auto-draft');
+      setFormData({ ...formData, content: data.draft });
+      toast.success('Auto-draft generated successfully');
+    } catch (error) {
+      toast.error('Failed to generate auto-draft');
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const handleDictate = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return toast.error('Voice dictation not supported in this browser.');
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setFormData(prev => ({ ...prev, content: prev.content + (prev.content ? ' ' : '') + transcript }));
+    };
+    recognition.onerror = (e) => toast.error('Microphone error: ' + e.error);
+    recognition.start();
+  };
+
+  // NLP Sentiment Analysis Engine
+  const analyzeSentiment = (text) => {
+    if (!text) return false;
+    const frictionKeywords = ['stuck', 'blocker', 'issue', 'waiting', 'delayed', 'frustrating', 'hard', 'failing', 'help', 'cannot', 'can not', 'fail', 'error'];
+    const lowerText = text.toLowerCase();
+    
+    let frictionScore = 0;
+    frictionKeywords.forEach(word => {
+      if (lowerText.includes(word)) frictionScore++;
+    });
+    
+    // If we detect 2 or more friction words, we flag it as high risk At-Risk.
+    return frictionScore >= 2;
+  };
+
   // Setup Calendar Events
   const calendarEvents = filteredReports.map(report => ({
     id: report._id,
-    title: `${report.employee?.name || 'Unknown'} - Report`,
+    title: `${report.employee?.name || 'Unknown'} - Report${analyzeSentiment(report.content) ? ' ⚠️' : ''}`,
     start: new Date(report.date),
     end: new Date(report.date),
     allDay: true,
@@ -102,9 +148,15 @@ const AdminReports = () => {
 
   const CustomEvent = ({ event }) => {
     const isMine = event.resource.employee?._id === userInfo._id;
+    const hasRisk = analyzeSentiment(event.resource.content);
+    
     return (
-      <div className={`p-1 text-xs rounded truncate font-medium ${isMine ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-800 border border-gray-200'}`}>
-        {event.title}
+      <div className={`p-1 text-xs rounded truncate font-medium flex items-center justify-between ${
+        hasRisk ? 'bg-orange-100 text-orange-800 border border-orange-300 shadow-sm font-bold' 
+        : isMine ? 'bg-primary-600 text-white' 
+        : 'bg-gray-100 text-gray-800 border border-gray-200'
+      }`}>
+        <span>{event.title}</span>
       </div>
     );
   };
@@ -197,7 +249,7 @@ const AdminReports = () => {
                       <th className="p-4 font-semibold uppercase tracking-wider text-xs whitespace-nowrap">Date</th>
                       <th className="p-4 font-semibold uppercase tracking-wider text-xs">Employee</th>
                       <th className="p-4 font-semibold uppercase tracking-wider text-xs">Role / Dept</th>
-                      <th className="p-4 font-semibold uppercase tracking-wider text-xs">Preview</th>
+                      <th className="p-4 font-semibold uppercase tracking-wider text-xs">Report Content</th>
                       <th className="p-4 font-semibold uppercase tracking-wider text-xs text-right">Actions</th>
                     </tr>
                   </thead>
@@ -205,8 +257,10 @@ const AdminReports = () => {
                     {filteredReports.length === 0 ? (
                       <tr><td colSpan="5" className="p-8 text-center text-gray-500">No reports found.</td></tr>
                     ) : (
-                      filteredReports.map((report) => (
-                        <tr key={report._id} className="hover:bg-gray-50 transition-colors">
+                      filteredReports.map((report) => {
+                        const hasRisk = analyzeSentiment(report.content);
+                        return (
+                        <tr key={report._id} className={`transition-colors ${hasRisk ? 'bg-orange-50/50 hover:bg-orange-50' : 'hover:bg-gray-50'}`}>
                           <td className="p-4 font-medium text-gray-900 whitespace-nowrap">
                             {new Date(report.date).toLocaleDateString()}
                           </td>
@@ -223,8 +277,13 @@ const AdminReports = () => {
                               </span>
                             )}
                           </td>
-                          <td className="p-4 text-gray-600">
-                            <p className="line-clamp-1 max-w-xs">{report.content}</p>
+                          <td className="p-4 text-gray-600 relative">
+                            {hasRisk && (
+                              <span className="absolute top-1 left-4 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-800 uppercase tracking-wide border border-orange-200">
+                                ⚠️ Needs Attention
+                              </span>
+                            )}
+                            <p className={`line-clamp-2 max-w-xs ${hasRisk ? 'pt-4' : ''}`}>{report.content}</p>
                           </td>
                           <td className="p-4 flex items-center justify-end gap-2">
                              {report.employee?._id === userInfo._id && (
@@ -237,7 +296,8 @@ const AdminReports = () => {
                              </button>
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -257,7 +317,26 @@ const AdminReports = () => {
             <p className="text-xs text-gray-400 mt-1">If you already submitted a report for this date, it will be updated.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Report Content *</label>
+            <div className="flex justify-between items-end mb-1">
+              <label className="block text-sm font-medium text-gray-700">Report Content *</label>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={handleDictate}
+                  className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded transition-colors ${listening ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                >
+                  <FiMic /> {listening ? 'Listening...' : 'Dictate'}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleAutoDraft}
+                  disabled={drafting}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded transition-colors disabled:opacity-50"
+                >
+                  <FiZap className={drafting ? "animate-pulse" : ""} /> {drafting ? 'Drafting...' : '✨ Auto-Draft Activity'}
+                </button>
+              </div>
+            </div>
             <textarea required className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 transition-shadow resize-none h-40"
               value={formData.content} onChange={e => setFormData({ ...formData, content: e.target.value })} placeholder="List your tasks, progress, blockers, etc..." />
           </div>

@@ -84,37 +84,101 @@ const MyTasks = () => {
     return <span className={`px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full border ${c}`}>{txt}</span>;
   };
 
+  const handleDragStart = (e, task) => {
+    e.dataTransfer.setData('taskId', task._id);
+  };
+
+  const handleDrop = async (e, newStatus) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    const task = tasks.find(t => t._id === taskId);
+    if (task && task.status !== newStatus) {
+      try {
+        setTasks(prev => prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t));
+        await api.put(`/tasks/${taskId}`, { status: newStatus });
+        toast.success(`Task moved`);
+      } catch (error) {
+        toast.error('Failed to move task');
+        fetchTasks();
+      }
+    }
+  };
+
+  const renderTaskCard = (task) => (
+    <div 
+      key={task._id} 
+      draggable 
+      onDragStart={(e) => handleDragStart(e, task)}
+      className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col cursor-move hover:shadow-md transition-shadow active:cursor-grabbing"
+    >
+      <div className="flex justify-between items-start mb-2">
+        {getPriorityBadge(task.priority)}
+        <button onClick={() => handleOpenModal(task)} className="text-gray-400 hover:text-primary-600 transition-colors">
+          <FiMessageSquare />
+        </button>
+      </div>
+      <h3 className="font-bold text-gray-900 text-sm mb-1 leading-tight">{task.title}</h3>
+      {task.project && <p className="text-[10px] font-semibold text-primary-600 mb-2 bg-primary-50 inline-block px-1.5 py-0.5 rounded truncate">{task.project.name}</p>}
+      <p className="text-xs text-gray-600 mb-3 line-clamp-2 flex-grow">{task.description}</p>
+      <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+        <div className={`text-[10px] font-bold uppercase tracking-wider ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 bg-red-50 px-1.5 py-0.5 rounded' : 'text-gray-400'}`}>
+          Due: {new Date(task.dueDate).toLocaleDateString()}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-gray-800">My Tasks</h2>
+        <h2 className="text-2xl font-bold text-gray-800">My Tasks Kanban</h2>
         <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm font-medium">
           <FiCheckSquare /> New Task
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? <p className="text-gray-500">Loading tasks...</p> : tasks.length === 0 ? <p className="text-gray-500">No tasks assigned to you right now.</p> : (
-          tasks.map(task => (
-            <div key={task._id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                {getStatusBadge(task.status)}
-                {getPriorityBadge(task.priority)}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start h-[calc(100vh-200px)]">
+        {loading ? <p className="text-gray-500 lg:col-span-3">Loading kanban board...</p> : (
+          <>
+            {/* Pending Column */}
+            <div className="bg-gray-50/80 rounded-xl border border-gray-200 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'pending')}>
+              <div className="p-4 bg-gray-100/50 border-b border-gray-200">
+                <h3 className="font-bold text-gray-700 uppercase tracking-wider text-xs flex items-center justify-between">
+                  Pending <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='pending').length}</span>
+                </h3>
               </div>
-              <h3 className="font-bold text-gray-900 text-lg mb-1 leading-tight">{task.title}</h3>
-              <p className="text-xs font-semibold text-primary-600 mb-3 bg-primary-50 inline-block px-2 py-1 rounded">{task.project?.name}</p>
-              <p className="text-sm text-gray-600 mb-4 line-clamp-3 flex-grow">{task.description}</p>
-
-              <div className="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center">
-                <div className={`text-xs font-semibold ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 bg-red-50 px-2 py-1 rounded' : 'text-gray-500'}`}>
-                  Due: {new Date(task.dueDate).toLocaleDateString()}
-                </div>
-                <button onClick={() => handleOpenModal(task)} className="text-sm font-medium text-white px-4 py-1.5 bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm">
-                  Update Task
-                </button>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='pending').map(renderTaskCard)}
               </div>
             </div>
-          ))
+
+            {/* In Progress Column */}
+            <div className="bg-blue-50/30 rounded-xl border border-blue-100 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'inprogress')}>
+              <div className="p-4 bg-blue-50 border-b border-blue-100">
+                <h3 className="font-bold text-blue-800 uppercase tracking-wider text-xs flex items-center justify-between">
+                  In Progress <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='inprogress').length}</span>
+                </h3>
+              </div>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='inprogress').map(renderTaskCard)}
+              </div>
+            </div>
+
+            {/* Completed Column */}
+            <div className="bg-teal-50/30 rounded-xl border border-teal-100 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'completed')}>
+              <div className="p-4 bg-teal-50 border-b border-teal-100">
+                <h3 className="font-bold text-teal-800 uppercase tracking-wider text-xs flex items-center justify-between">
+                  Completed <span className="bg-teal-200 text-teal-800 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='completed').length}</span>
+                </h3>
+              </div>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='completed').map(renderTaskCard)}
+              </div>
+            </div>
+          </>
         )}
       </div>
 

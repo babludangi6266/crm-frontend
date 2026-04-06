@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { FiEdit, FiTrash2, FiPlus, FiTarget, FiMessageCircle } from 'react-icons/fi';
+import { FiEdit, FiTrash2, FiPlus, FiTarget, FiMessageCircle, FiMic, FiDownload } from 'react-icons/fi';
 import Modal from '../../components/Modals/Modal';
 import { useSelector } from 'react-redux';
 
@@ -11,6 +11,7 @@ const Leads = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [listening, setListening] = useState(false);
   
   const { userInfo } = useSelector(state => state.auth);
 
@@ -88,6 +89,22 @@ const Leads = () => {
     }
   };
 
+  const handleDictate = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return toast.error('Voice dictation not supported in this browser.');
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setFollowUpData(prev => ({ ...prev, description: prev.description + (prev.description ? ' ' : '') + transcript }));
+    };
+    recognition.onerror = (e) => toast.error('Microphone error: ' + e.error);
+    recognition.start();
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this lead?')) {
       try {
@@ -111,18 +128,81 @@ const Leads = () => {
     return <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md border ${map[status] || 'bg-gray-100 text-gray-800'}`}>{status}</span>;
   };
 
+  const getEngagementScore = (lead) => {
+    let score = 0;
+    if (lead.email) score += 20;
+    if (lead.mobileNo) score += 20;
+    if (lead.description && lead.description.trim().length > 5) score += 10;
+    score += Math.min(lead.followUps.length * 25, 50); // Up to 50 pts for followups
+    return score; // Max 100
+  };
+
+  const getScoreBadge = (score) => {
+    if (score >= 80) return <div className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded flex items-center gap-1">🔥 Hot ({score}%)</div>;
+    if (score >= 50) return <div className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded flex items-center gap-1">⚡ Warm ({score}%)</div>;
+    return <div className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1">❄️ Cold ({score}%)</div>;
+  };
+
+  const getAtRiskStatus = (lead) => {
+    if (lead.status === 'Converted' || lead.status === 'Lost') return false;
+    
+    let lastContactDate = lead.issueDate ? new Date(lead.issueDate) : null;
+    if (lead.followUps && lead.followUps.length > 0) {
+       const latestFollowUp = new Date(Math.max(...lead.followUps.map(f => new Date(f.date))));
+       lastContactDate = latestFollowUp > lastContactDate ? latestFollowUp : lastContactDate;
+    }
+    
+    if (!lastContactDate) return false;
+    
+    const diffTime = Math.abs(new Date() - lastContactDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    return diffDays > 14;
+  };
+
+  const exportCSV = () => {
+    const headers = ['Name', 'Company', 'Email', 'Mobile Number', 'Location', 'Status', 'Engagement Score', 'Issue Date'];
+    const rows = leads.map(l => [
+      `"${(l.name || '').replace(/"/g, '""')}"`,
+      `"${(l.company || '').replace(/"/g, '""')}"`,
+      `"${(l.email || '').replace(/"/g, '""')}"`,
+      `"${(l.mobileNo || '').replace(/"/g, '""')}"`,
+      `"${(l.location || '').replace(/"/g, '""')}"`,
+      l.status,
+      getEngagementScore(l),
+      l.issueDate ? new Date(l.issueDate).toLocaleDateString() : 'N/A'
+    ]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+      
+    var encodedUri = encodeURI(csvContent);
+    var link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Lexa_Leads_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
            <FiTarget className="text-primary-500" /> Lead Management
         </h2>
-        <button
-          onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm font-medium"
-        >
-          <FiPlus /> New Lead
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg transition-all shadow-sm font-medium"
+          >
+            <FiDownload /> Export CSV
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-all shadow-sm font-medium"
+          >
+            <FiPlus /> New Lead
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -133,7 +213,7 @@ const Leads = () => {
                 <th className="p-4 font-semibold uppercase tracking-wider text-xs">Lead Intel</th>
                 <th className="p-4 font-semibold uppercase tracking-wider text-xs">Contact</th>
                 <th className="p-4 font-semibold uppercase tracking-wider text-xs">Status & Date</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Follow-ups</th>
+                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Score & Follow-ups</th>
                 <th className="p-4 font-semibold uppercase tracking-wider text-xs text-right">Actions</th>
               </tr>
             </thead>
@@ -143,7 +223,7 @@ const Leads = () => {
               ) : leads.length === 0 ? (
                 <tr><td colSpan="5" className="p-8 text-center text-gray-500">No leads found. Click "New Lead" to get started.</td></tr>
               ) : (
-                leads.map((lead) => (
+                leads.sort((a,b) => getEngagementScore(b) - getEngagementScore(a)).map((lead) => (
                   <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
                     <td className="p-4">
                       <div className="font-bold text-gray-900">{lead.name}</div>
@@ -156,13 +236,22 @@ const Leads = () => {
                       <div className="text-gray-400 text-[10px] mt-0.5">{lead.location}</div>
                     </td>
                     <td className="p-4">
-                       {getStatusBadge(lead.status)}
+                       {getAtRiskStatus(lead) ? (
+                         <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md border bg-red-100 text-red-800 border-red-300 shadow-sm flex items-center gap-1 w-max">
+                           🚨 AT RISK
+                         </span>
+                       ) : (
+                         getStatusBadge(lead.status)
+                       )}
                        <div className="text-xs text-gray-500 font-medium mt-2">Issued: {new Date(lead.issueDate).toLocaleDateString()}</div>
                     </td>
                     <td className="p-4">
-                       <button onClick={() => handleOpenFollowUp(lead)} className="text-[10px] font-bold uppercase tracking-wider bg-primary-50 text-primary-600 hover:bg-primary-100 px-2 py-1 rounded mb-2 transition-colors border border-primary-200">
-                         + Log Follow-up
-                       </button>
+                       <div className="mb-2 flex justify-between items-center">
+                         {getScoreBadge(getEngagementScore(lead))}
+                         <button onClick={() => handleOpenFollowUp(lead)} className="text-[10px] font-bold uppercase tracking-wider bg-primary-50 text-primary-600 hover:bg-primary-100 px-2 py-1 rounded transition-colors border border-primary-200">
+                           + Log
+                         </button>
+                       </div>
                        <div className="space-y-1 mt-1 max-h-20 overflow-y-auto custom-scrollbar">
                          {lead.followUps.length === 0 ? <p className="text-[10px] text-gray-400 italic">No logs</p> : 
                            lead.followUps.slice().reverse().map((f, i) => (
@@ -261,7 +350,16 @@ const Leads = () => {
                 value={followUpData.date} onChange={e => setFollowUpData({ ...followUpData, date: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Discussion / Notes *</label>
+              <div className="flex justify-between items-end mb-1">
+                <label className="block text-sm font-medium text-gray-700">Discussion / Notes *</label>
+                <button 
+                  type="button" 
+                  onClick={handleDictate}
+                  className={`flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded transition-colors ${listening ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                >
+                  <FiMic /> {listening ? 'Listening...' : 'Dictate'}
+                </button>
+              </div>
               <textarea required className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 transition-shadow resize-none h-24"
                 value={followUpData.description} onChange={e => setFollowUpData({ ...followUpData, description: e.target.value })} placeholder="What was discussed?" />
             </div>

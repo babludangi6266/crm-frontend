@@ -18,9 +18,11 @@ const ChatView = () => {
   const [selectedUser, setSelectedUser] = useState('');
   const messagesEndRef = useRef(null);
 
+  // Extract base URL from api config (removing '/api')
+  const baseURL = api.defaults.baseURL.replace('/api', '');
+
   useEffect(() => {
-    // Assuming backend runs on 5000 in dev
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io(baseURL);
     setSocket(newSocket);
 
     return () => newSocket.close();

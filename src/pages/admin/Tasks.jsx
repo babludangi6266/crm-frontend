@@ -102,65 +102,114 @@ const Tasks = () => {
     return <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${map[status]}`}>{textMap[status]}</span>;
   };
 
+  const handleDragStart = (e, task) => {
+    e.dataTransfer.setData('taskId', task._id);
+  };
+
+  const handleDrop = async (e, newStatus) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('taskId');
+    const task = tasks.find(t => t._id === taskId);
+    if (task && task.status !== newStatus) {
+      try {
+        setTasks(prev => prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t));
+        await api.put(`/tasks/${taskId}`, { status: newStatus });
+        toast.success(`Task moved`);
+      } catch (error) {
+        toast.error('Failed to move task');
+        fetchData();
+      }
+    }
+  };
+
+  const renderTaskCard = (task) => (
+    <div 
+      key={task._id} 
+      draggable 
+      onDragStart={(e) => handleDragStart(e, task)}
+      className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col cursor-move hover:shadow-md transition-shadow active:cursor-grabbing"
+    >
+      <div className="flex justify-between items-start mb-2">
+        {getPriorityBadge(task.priority)}
+        <div className="flex gap-2">
+          <button onClick={() => handleOpenModal(task)} className="text-blue-400 hover:text-blue-600 transition-colors"><FiEdit /></button>
+          <button onClick={() => handleDelete(task._id)} className="text-red-400 hover:text-red-600 transition-colors"><FiTrash2 /></button>
+        </div>
+      </div>
+      <h3 className="font-bold text-gray-900 text-sm mb-1 leading-tight">{task.title}</h3>
+      {task.project && <p className="text-[10px] font-semibold text-primary-600 mb-2 bg-primary-50 inline-block px-1.5 py-0.5 rounded truncate">{task.project.name}</p>}
+      <p className="text-xs text-gray-600 line-clamp-2">{task.description}</p>
+      
+      <div className="mt-3 bg-gray-50 p-2 rounded border border-gray-100 flex items-center gap-2">
+        <div className="bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold text-gray-600">
+          {task.assignedTo?.name ? task.assignedTo.name.charAt(0) : '?'}
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold text-gray-800">{task.assignedTo?.name || 'Unassigned'}</p>
+          <p className="text-[9px] text-gray-500">{task.assignedTo?.email}</p>
+        </div>
+      </div>
+
+      <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between items-center">
+        <div className={`text-[10px] font-bold uppercase tracking-wider ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 bg-red-50 px-1.5 py-0.5 rounded' : 'text-gray-400'}`}>
+          Due: {new Date(task.dueDate).toLocaleDateString()}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-gray-800">Tasks Management</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Tasks Kanban (Global)</h2>
         <button onClick={() => handleOpenModal()} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm font-medium">
           <FiPlus /> New Task
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100 text-gray-700 text-sm">
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Task Details</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Assignee</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Due Date</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Status</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
-              {loading ? <tr><td colSpan="5" className="p-8 text-center text-gray-500">Loading tasks...</td></tr>
-                : tasks.length === 0 ? <tr><td colSpan="5" className="p-8 text-center text-gray-500">No tasks found. Create one.</td></tr> : (
-                  tasks.map((task) => (
-                    <tr key={task._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 w-96">
-                        <div className="flex items-start gap-3">
-                          <FiCheckSquare className="mt-1 flex-shrink-0 text-gray-400" />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">{task.title}</span>
-                              {getPriorityBadge(task.priority)}
-                            </div>
-                            <div className="text-gray-500 text-xs mt-1 truncate max-w-xs">{task.description}</div>
-                            <div className="text-primary-600 font-medium text-xs mt-1">Project: {task.project?.name}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="font-medium text-gray-800">{task.assignedTo?.name}</div>
-                        <div className="text-gray-500 text-xs">{task.assignedTo?.email}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-500' : 'text-gray-700'}`}>
-                          {new Date(task.dueDate).toLocaleDateString()}
-                        </span>
-                      </td>
-                      <td className="p-4">{getStatusBadge(task.status)}</td>
-                      <td className="p-4 flex gap-2 justify-end items-center h-full pt-6">
-                        <button onClick={() => handleOpenModal(task)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors" title="Edit"><FiEdit className="text-lg" /></button>
-                        <button onClick={() => handleDelete(task._id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md transition-colors" title="Delete"><FiTrash2 className="text-lg" /></button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start h-[calc(100vh-200px)]">
+        {loading ? <p className="text-gray-500 lg:col-span-3">Loading kanban board...</p> : (
+          <>
+            {/* Pending Column */}
+            <div className="bg-gray-50/80 rounded-xl border border-gray-200 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'pending')}>
+              <div className="p-4 bg-gray-100/50 border-b border-gray-200">
+                <h3 className="font-bold text-gray-700 uppercase tracking-wider text-xs flex items-center justify-between">
+                  Pending <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='pending').length}</span>
+                </h3>
+              </div>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='pending').map(renderTaskCard)}
+              </div>
+            </div>
+
+            {/* In Progress Column */}
+            <div className="bg-blue-50/30 rounded-xl border border-blue-100 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'inprogress')}>
+              <div className="p-4 bg-blue-50 border-b border-blue-100">
+                <h3 className="font-bold text-blue-800 uppercase tracking-wider text-xs flex items-center justify-between">
+                  In Progress <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='inprogress').length}</span>
+                </h3>
+              </div>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='inprogress').map(renderTaskCard)}
+              </div>
+            </div>
+
+            {/* Completed Column */}
+            <div className="bg-teal-50/30 rounded-xl border border-teal-100 flex flex-col h-full overflow-hidden"
+                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, 'completed')}>
+              <div className="p-4 bg-teal-50 border-b border-teal-100">
+                <h3 className="font-bold text-teal-800 uppercase tracking-wider text-xs flex items-center justify-between">
+                  Completed <span className="bg-teal-200 text-teal-800 px-2 py-0.5 rounded-full">{tasks.filter(t => t.status==='completed').length}</span>
+                </h3>
+              </div>
+              <div className="flex-grow overflow-y-auto custom-scrollbar p-3 space-y-3">
+                 {tasks.filter(t => t.status==='completed').map(renderTaskCard)}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editMode ? 'Edit Task' : 'Create Task'}>
